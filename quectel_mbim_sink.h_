@@ -1,0 +1,35 @@
+#pragma once
+#include "quectel_observer.h"
+#include <iostream>
+
+/*
+implement device services mobile broadband api event sink
+*/
+static const IID IID_DEVICESERVICESEVENTS = {0x0A900C19, 0x6824, 0x4E97, {0xB7, 0x6E, 0xCF, 0x23, 0x9D, 0x0C, 0xA6, 0x42}};
+class CDeviceServicesSink : public IMbnDeviceServicesEvents, public MbnSubject
+{
+private:
+	ULONG m_numReferences;
+
+public:
+	REFIID get_refid() const
+	{
+		return IID_DEVICESERVICESEVENTS;
+	}
+
+	virtual HRESULT OnQuerySupportedCommandsComplete(IDeviceService *deviceService, __RPC__in SAFEARRAY *commandIDList, HRESULT status, ULONG requestID);
+	virtual HRESULT OnOpenCommandSessionComplete(IDeviceService *deviceService, HRESULT status, ULONG requestID);
+	virtual HRESULT OnCloseCommandSessionComplete(IDeviceService *deviceService, HRESULT status, ULONG requestID);
+	virtual HRESULT OnSetCommandComplete(IDeviceService *deviceService, ULONG responseID, __RPC__in SAFEARRAY *deviceServiceData, HRESULT status, ULONG requestID);
+	virtual HRESULT OnQueryCommandComplete(IDeviceService *deviceService, ULONG responseID, __RPC__in SAFEARRAY *deviceServiceData, HRESULT status, ULONG requestID);
+	virtual HRESULT OnEventNotification(IDeviceService *deviceService, ULONG eventID, __RPC__in SAFEARRAY *deviceServiceData);
+	virtual HRESULT OnOpenDataSessionComplete(IDeviceService *deviceService, HRESULT status, ULONG requestID);
+	virtual HRESULT OnCloseDataSessionComplete(IDeviceService *deviceService, HRESULT status, ULONG requestID);
+	virtual HRESULT OnWriteDataComplete(IDeviceService *deviceService, HRESULT status, ULONG requestID);
+	virtual HRESULT OnReadData(IDeviceService *deviceService, __RPC__in SAFEARRAY *deviceServiceData);
+	virtual HRESULT OnInterfaceStateChange(interfaceID, MBN_DEVICE_SERVICES_INTERFACE_STATE stateChange);
+
+	virtual HRESULT QueryInterface(REFIID riid, _COM_Outptr_ void **ppvObject);
+	virtual ULONG AddRef(void);
+	virtual ULONG Release(void);
+};

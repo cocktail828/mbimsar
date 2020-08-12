@@ -1,0 +1,189 @@
+#include "quectel_mbim_sink.h"
+#include "quectel_string_help.h"
+
+HRESULT STDMETHODCALLTYPE CDeviceServicesSink::OnQuerySupportedCommandsComplete(__RPC__in_opt IMbnDeviceService *deviceService, __RPC__in SAFEARRAY *commandIDList, HRESULT status, ULONG requestID)
+{
+	MbnNotify notify_;
+	ZeroMemory(&notify_, sizeof(MbnNotify));
+	notify_._type = Sink_MBIM;
+	notify_._servicestatus = ServiceQuery;
+	notify_.mbn_interface_ptr = deviceService;
+	notify_.status = status;
+	notify_.requestID = requestID;
+	notify_.safeArray = commandIDList;
+	Notify(&notify_);
+
+	return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CDeviceServicesSink::OnOpenCommandSessionComplete(__RPC__in_opt IMbnDeviceService *deviceService, HRESULT status, ULONG requestID)
+{
+	MbnNotify notify_;
+	ZeroMemory(&notify_, sizeof(MbnNotify));
+	notify_._type = Sink_MBIM;
+	notify_._servicestatus = ServiceOpenCmd;
+	notify_.mbn_interface_ptr = deviceService;
+	notify_.status = status;
+	notify_.requestID = requestID;
+	Notify(&notify_);
+
+	return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CDeviceServicesSink::OnCloseCommandSessionComplete(__RPC__in_opt IMbnDeviceService *deviceService, HRESULT status, ULONG requestID)
+{
+	MbnNotify notify_;
+	ZeroMemory(&notify_, sizeof(MbnNotify));
+	notify_._type = Sink_MBIM;
+	notify_._servicestatus = ServiceCloseCmd;
+	notify_.mbn_interface_ptr = deviceService;
+	notify_.status = status;
+	notify_.requestID = requestID;
+	Notify(&notify_);
+
+	return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CDeviceServicesSink::OnSetCommandComplete(__RPC__in_opt IMbnDeviceService *deviceService, ULONG responseID, __RPC__in SAFEARRAY *deviceServiceData, HRESULT status, ULONG requestID)
+{
+	MbnNotify notify_;
+	ZeroMemory(&notify_, sizeof(MbnNotify));
+	notify_._type = Sink_MBIM;
+	notify_._servicestatus = ServiceSet;
+	notify_.mbn_interface_ptr = deviceService;
+	notify_.status = status;
+	notify_.requestID = requestID;
+	notify_.safeArray = deviceServiceData;
+	Notify(&notify_);
+
+	return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CDeviceServicesSink::OnQueryCommandComplete(__RPC__in_opt IMbnDeviceService *deviceService, ULONG responseID, __RPC__in SAFEARRAY *deviceServiceData, HRESULT status, ULONG requestID)
+{
+	MbnNotify notify_;
+	ZeroMemory(&notify_, sizeof(MbnNotify));
+	notify_._type = Sink_MBIM;
+	notify_._servicestatus = ServiceQuery;
+	notify_.mbn_interface_ptr = deviceService;
+	notify_.status = status;
+	notify_.requestID = requestID;
+	notify_.safeArray = deviceServiceData;
+	Notify(&notify_);
+
+	return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CDeviceServicesSink::OnEventNotification(__RPC__in_opt IMbnDeviceService *deviceService, ULONG eventID, __RPC__in SAFEARRAY *deviceServiceData)
+{
+	MbnNotify notify_;
+	ZeroMemory(&notify_, sizeof(MbnNotify));
+	notify_._type = Sink_MBIM;
+	notify_._servicestatus = ServiceEvent;
+	notify_.mbn_interface_ptr = deviceService;
+	notify_.safeArray = deviceServiceData;
+	notify_.eventID = eventID;
+	Notify(&notify_);
+
+	return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CDeviceServicesSink::OnOpenDataSessionComplete(__RPC__in_opt IMbnDeviceService *deviceService, HRESULT status, ULONG requestID)
+{
+	MbnNotify notify_;
+	ZeroMemory(&notify_, sizeof(MbnNotify));
+	notify_._type = Sink_MBIM;
+	notify_._servicestatus = ServiceOpenData;
+	notify_.mbn_interface_ptr = deviceService;
+	notify_.status = status;
+	notify_.requestID = requestID;
+	Notify(&notify_);
+
+	return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CDeviceServicesSink::OnCloseDataSessionComplete(__RPC__in_opt IMbnDeviceService *deviceService, HRESULT status, ULONG requestID)
+{
+	MbnNotify notify_;
+	ZeroMemory(&notify_, sizeof(MbnNotify));
+	notify_._type = Sink_MBIM;
+	notify_._servicestatus = ServiceCloseData;
+	notify_.mbn_interface_ptr = deviceService;
+	notify_.status = status;
+	notify_.requestID = requestID;
+	Notify(&notify_);
+
+	return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CDeviceServicesSink::OnWriteDataComplete(__RPC__in_opt IMbnDeviceService *deviceService, HRESULT status, ULONG requestID)
+{
+	MbnNotify notify_;
+	ZeroMemory(&notify_, sizeof(MbnNotify));
+	notify_._type = Sink_MBIM;
+	notify_._servicestatus = ServiceWriteData;
+	notify_.mbn_interface_ptr = deviceService;
+	notify_.status = status;
+	notify_.requestID = requestID;
+	Notify(&notify_);
+
+	return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CDeviceServicesSink::OnReadData(__RPC__in_opt IMbnDeviceService *deviceService, __RPC__in SAFEARRAY *deviceServiceData)
+{
+	MbnNotify notify_;
+	ZeroMemory(&notify_, sizeof(MbnNotify));
+	notify_._type = Sink_MBIM;
+	notify_._servicestatus = ServiceReadData;
+	notify_.mbn_interface_ptr = deviceService;
+	notify_.safeArray = deviceServiceData;
+	Notify(&notify_);
+
+	return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CDeviceServicesSink::OnInterfaceStateChange(__RPC__in BSTR interfaceID, MBN_DEVICE_SERVICES_INTERFACE_STATE stateChange)
+{
+	//异常处理机制
+	MbnNotify notify_;
+	ZeroMemory(&notify_, sizeof(MbnNotify));
+	notify_._type = Sink_MBIM;
+	notify_._servicestatus = ServiceState;
+	notify_.strinterfaceid = _com_util::ConvertBSTRToString(interfaceID);
+	notify_._servicestate = stateChange;
+	//notify_.mbn_interface_ptr = deviceService;
+	//notify_.safeArray = deviceServiceData;
+	Notify(&notify_);
+	return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CDeviceServicesSink::QueryInterface(REFIID riid, _COM_Outptr_ void **ppvObject)
+{
+	if ((riid == IID_IUnknown) || (riid == get_refid()) || (riid == IID_IMbnInterfaceManager))
+	{
+		*ppvObject = this;
+		AddRef();
+		return S_OK;
+	}
+	else
+	{
+		*ppvObject = NULL;
+		return E_NOINTERFACE;
+	}
+}
+
+ULONG STDMETHODCALLTYPE CDeviceServicesSink::AddRef(void)
+{
+	return InterlockedIncrement((LONG *)&m_numReferences);
+}
+
+ULONG STDMETHODCALLTYPE CDeviceServicesSink::Release(void)
+{
+	ULONG numReferencesRemaining = InterlockedDecrement((LONG *)&m_numReferences);
+	if (numReferencesRemaining == 0)
+	{
+		delete this;
+	}
+	return numReferencesRemaining;
+}

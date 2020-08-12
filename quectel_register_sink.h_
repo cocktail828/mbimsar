@@ -1,0 +1,38 @@
+#pragma once
+#include "quectel_mbim_sink.h"
+
+template<typename Sinker, typename mgr>
+std::pair<IConnectionPoint*, DWORD> quectel_resigter_sink(Sinker sinker, mgr mgr_interface)
+{
+	HRESULT hr;	
+	IConnectionPointContainer*	container;
+	IConnectionPoint*	cp;	
+	IUnknown*	unknownSink;	
+	DWORD                  adviseHandle = 0;
+	std::pair<IConnectionPoint*, DWORD> result_;
+	hr = mgr_interface->QueryInterface(IID_IConnectionPointContainer, (void**)&container);
+	if(FAILED(hr))
+	{
+		return result_;
+	}
+	IID id = sinker->get_refid();
+	hr = container->FindConnectionPoint(sinker->get_refid(), &cp);
+	if(FAILED(hr))
+	{
+		return result_;
+	}
+	hr = sinker->QueryInterface
+		(IID_IUnknown, (void**)&unknownSink);
+	if(FAILED(hr))
+	{		
+		return result_;
+	}	
+	hr = cp->Advise(unknownSink,&adviseHandle);
+	if(FAILED(hr))
+	{	
+		return result_;
+	}
+	result_.first = cp;
+	result_.second = adviseHandle;
+	return result_;
+}

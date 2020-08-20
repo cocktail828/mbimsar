@@ -1,7 +1,10 @@
-#pragma once
+#ifndef __MBIM_SAR
+#define __MBIM_SAR
 
 #include <iostream>
 #include <vector>
+#include <mutex>
+
 #include "config/config_linux.h"
 using namespace std;
 /*
@@ -26,6 +29,7 @@ enum notification_type
 	Sink_MBIM,
 	Sink_Max
 };
+
 /*	CConnectionEventsSink */
 enum ConnectionEventType
 {
@@ -208,29 +212,4 @@ typedef struct
 	HRESULT status;
 } MbnNotify;
 
-/************************************************************************/
-/* 观察者模式 */
-/************************************************************************/
-
-class MbnSubject;
-class MbnObserver
-{
-public:
-	virtual void update(MbnSubject *subject, void *notify) = 0;
-};
-
-class MbnSubject
-{
-public:
-	MbnSubject();
-	virtual ~MbnSubject();
-
-	virtual void Attach(MbnObserver *observer);
-	virtual void Detach(MbnObserver *oldobserver);
-	virtual void Notify(void *notify);
-
-private:
-	std::vector<MbnObserver *> m_observers;
-};
-
-// bool quectel_deresigter_sink(IConnectionPoint *cp, DWORD adviseHandle);
+#endif //__MBIM_SAR

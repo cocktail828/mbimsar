@@ -6,9 +6,9 @@
 #include <mutex>
 #include <iostream>
 #include <condition_variable>
+
 #include "config/config.h"
-#include "IDeviceService.h"
-#include "quectel_observer.h"
+#include "MbimService.h"
 #include "MbimToSar.h"
 #pragma pack(push, 1)
 using namespace std;
@@ -101,25 +101,29 @@ typedef struct
 	unsigned long SARBAckOffIndex;
 } MBIM_SAR_CONFIG_INFO;
 
-class CQuectelMbimManager : public MbnObserver
+class CMbimManager : public IObserver
 {
-	SINGLETON_DECLARE(CQuectelMbimManager)
+private:
+	CMbimManager(const CMbimManager &) = delete;
+	CMbimManager &operator=(const CMbimManager &) = delete;
+
 public:
-	CQuectelMbimManager();
-	~CQuectelMbimManager();
+	CMbimManager();
+	~CMbimManager();
 
-	//初始化
-	int Init(const char *d);
+	static int Init(const char *d);
+	static void UnInit();
+	static CMbimManager &instance();
 
-	//反初始化
-	void UnInit();
+public:
+	uint32_t getRequestId();
+
+	int GetIsMbimReady(bool *);
 
 	//打开设备服务
 	int OpenDeviceServices(std::string strInterfaceId);
 	//关闭设备服务
 	int CloseDeviceServices(/*CQuectelMbimServices* handle*/);
-
-	int GetIsMbimReady(bool *bEnable);
 
 	int SetSarEnable(bool bEnable);
 
@@ -147,18 +151,21 @@ public:
 
 	int SetSarClear();
 
-	IDeviceService *getdeviceservice();
-
 	void OpenCmdSessionCb();
 
-	void update(MbnSubject *subject, void *notify);
+	void update(uint8_t *, int);
 
 private:
-	bool m_init_flag;
-	std::mutex m_op_lock;
+	static std::mutex mGlobalLock;
+	static bool mReady;
+	static MbimService mService;
 
-	bool m_bIsReady;
+private:
+	std::mutex mReqLock;
+	std::condition_variable mReqCond;
+	uint32_t mRequestId;
 
+private:
 	bool m_bIsSarEnable;
 
 	bool m_bIsMode;
@@ -178,29 +185,6 @@ private:
 	std::vector<MBIM_SAR_CONFIG_INFO> m_vecSarConfigInfo;
 
 	MBIM_SAR_BAND_POWER m_sar_band_power;
-
-public:
-	//设备服务
-	IDeviceService *m_deviceservice;
-
-	long m_nDeviceId;
-
-	std::mutex m_event_lock;
-	std::condition_variable m_waitevent;
-
-	std::condition_variable m_sarmode_setevent;
-	std::condition_variable m_sarmode_getevent;
-
-	std::condition_variable m_sarprofile_setevent;
-	std::condition_variable m_sarprofile_getevent;
-
-	std::condition_variable m_sartableon_setevent;
-	std::condition_variable m_sartableon_getevent;
-
-	std::condition_variable m_sartablevalue_setevent;
-	std::condition_variable m_sartablevalue_getevent;
-
-	std::condition_variable m_sarclear_setevent;
 };
 
-typedef CQuectelMbimManager MBIMMANAGER;
+typedef CMbimManager MBIMMANAGER;

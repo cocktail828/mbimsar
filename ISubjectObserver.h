@@ -33,9 +33,8 @@ public:
     {
         std::lock_guard<std::mutex> _lk(mListLock);
         mObservers.emplace_back(o);
-        LOGD << "attach new observer(" + std::to_string(mObservers.size()) + ") sn "
-             << o->getRequestId() << " cid "
-             << ", list size " << mObservers.size() << ENDL;
+        LOGD << "attach new observer(" + std::to_string(mObservers.size()) + ") tid "
+             << o->getRequestId() << ", list size " << mObservers.size() << ENDL;
     }
 
     void detach(IObserver *o)
@@ -46,7 +45,7 @@ public:
             if ((*iter) == o)
             {
                 mObservers.erase(iter);
-                LOGD << "detach observer(" + std::to_string(mObservers.size()) + ") sn "
+                LOGD << "detach observer(" + std::to_string(mObservers.size()) + ") tid "
                      << o->getRequestId()
                      << ", list size " << mObservers.size() << ENDL;
             }
@@ -65,7 +64,7 @@ public:
         LOGD << "removing all observers" << ENDL;
         for (auto o : mObservers)
         {
-            LOGD << "removing observer: sn " << o->getRequestId() << ENDL;
+            LOGD << "removing observer: tid " << o->getRequestId() << ENDL;
             o->update(nullptr, 0);
         }
 
@@ -84,7 +83,7 @@ public:
             if (o->getRequestId() == tid)
             {
                 mObservers.erase(iter);
-                LOGD << "detach observer(" + std::to_string(mObservers.size()) + ") sn "
+                LOGD << "detach observer(" + std::to_string(mObservers.size()) + ") tid "
                      << o->getRequestId() << ENDL;
                 o->update(data, len);
                 break;

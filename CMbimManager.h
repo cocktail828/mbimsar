@@ -7,102 +7,121 @@
 #include <iostream>
 #include <condition_variable>
 
-#include "config/config.h"
 #include "MbimService.h"
 #include "MbimToSar.h"
 #pragma pack(push, 1)
 using namespace std;
 
-#define QUEC_MBIM_MS_SAR_BACKOFF_SET 0x92F456E8
-#define QUEC_MBIM_MS_SAR_BACKOFF_QUERY 0x8204F6F9
+/**
+ * PC基于该信令下发查询/设置SAR Enable/Disable、SetSarBackoffIndex。
+ */
 
-typedef enum
+// DATA
+typedef struct
 {
-	QUEC_SVC_MSSAR_NULL_STATE = 0,
-	QUEC_SVC_MSSAR_BODY_SAR_MODE_STATE_SET,
-	QUEC_SVC_MSSAR_BODY_SAR_MODE_STATE_GET,
-	QUEC_SVC_MSSAR_BODY_SAR_PROFILE_VALUE_SET,
-	QUEC_SVC_MSSAR_BODY_SAR_PROFILE_VALUE_GET,
-	QUEC_SVC_MSSAR_BODY_SAR_CONFIG_NV_SET,
-	QUEC_SVC_MSSAR_BODY_SAR_CONFIG_NV_GET,
-	QUEC_SVC_MSSAR_BODY_SAR_ON_TABLE_VALUE_SET,
-	QUEC_SVC_MSSAR_BODY_SAR_ON_TABLE_VALUE_GET,
-	QUEC_SVC_MSSAR_BODY_SAR_CLEAR_STATE_SET,
+	uint32_t SARAntennaIndex; // 指定天线号
+	uint32_t SARBAckOffIndex; // 功率回退等级(0-8)
+} MBIM_SAR_STATE_BACKOFF_DATA;
 
-	QUEC_SVC_MSSAR_MAX_STATE
-} quec_mssar_set_get_state;
+// REQ
+typedef struct
+{
+	uint32_t SARMode;					 // SAR工作模式(目前支持0 Device 1 OS)
+	uint32_t SARBackOffState;			 // SAR工作状态(目前支持Enable/Disable)
+	uint32_t ElementCount;				 // 支持的组数(目前仅支持1)
+	MBIM_SAR_STATE_BACKOFF_DATA data[0]; // 保存指定天线号及该天线的功率回退等级
+} MBIM_SAR_STATE_BACKOFF_REQ;
+
+// RESP
+typedef struct
+{
+	uint32_t SARMode;					 // SAR工作模式(目前支持0 Device 1 OS)
+	uint32_t SARBackOffStatus;			 // SAR工作状态(目前支持Enable/Disable)
+	uint32_t SARWifiIntegration;		 // WIFI信息(当前不支持)
+	uint32_t ElementCount;				 // 发射天线号(目前仅支持1)
+	MBIM_SAR_STATE_BACKOFF_DATA data[0]; // 保存指定天线号及该天线的功率回退等级
+} MBIM_SAR_STATE_BACKOFF_RESP;
+
+/**
+ * PC基于该信令下发查询/设置Quectel定义的SarMode(GPIO Or SW Control)、
+ * SarProfile(sar table)、SarPowerNv(SarIndex Tx Power)。 
+ */
+// BodySarMode数据结构成员值域
+#define QUEC_SVC_MSSAR_TRIGGER_DEFAULT_MODE 0 // 未定义状态
+#define QUEC_SVC_MSSAR_TRIGGER_AT_MODE 1	  // AT命令软件控制
+#define QUEC_SVC_MSSAR_TRIGGER_PIN_MODE 2	  // GPIO控制
+#define QUEC_SVC_MSSAR_TRIGGER_MBIM_MODE 3	  // MBIM协议控制
+
+// BodySarProfile数据结构成员值域
+#define QUEC_MBIM_MS_SAR_PROFILE0 0 // Table 0 选中配置
+#define QUEC_MBIM_MS_SAR_PROFILE1 1 // Table 1 选中配置
+
+// BodySarTech1数据结构成员值域
+#define LTE 0	// LTE
+#define WCDMA 1 // WCDMA
 
 typedef struct
 {
-	unsigned char SetBodySarMode; /*0 HW control by DPR pin----1 SW control*/
-	unsigned char SetBodySarProfile /*0 Sar table 0----1 Sar table 1..........*/;
-	unsigned char SetBodySarTech /*1==WCDMA  2==LTE*/;
-	unsigned short SetBodySarPower[8] /* sar power */;
-	unsigned char SetBodySarBand;
-	unsigned char SetBodySarOnTable;
-} quec_mssar_set_sar_config_req;
+	uint8_t BodySarMode;	  // SAR工作模式(0====default, 1==AT,2== HW control by DPR pin----3 mbim control)
+	uint8_t BodySarProfile;	  // SAR 表格号
+	uint8_t BodySarTech0[24]; // 指定BodySarStruct的数据长度(目前固定24字节)
+	uint8_t BodySarTech1;	  // 请求制式(LTE/WCDMA)
+	uint16_t BodySarPower[8]; // 当前服役的SAR Table
+	uint8_t BodySarBand;	  // 请求频段(band等)
+	uint8_t BodySarOnTable;	  // 请求生校表格
+} MBIM_SAR_QUEC_DATA;
 
+// 请求模式(SET/QUERY)
+#define QUEC_MBIM_MS_SAR_BACKOFF_SET 0x92F456E8	  // QuecMode SET
+#define QUEC_MBIM_MS_SAR_BACKOFF_QUERY 0x8204F6F9 // QuecMode QUERY
+
+// 请求模块配置状态
+#define QUEC_SVC_MSSAR_NULL_STATE 0					 // 保留
+#define QUEC_SVC_MSSAR_BODY_SAR_MODE_STATE_SET 1	 // 设置 SAR工作模式
+#define QUEC_SVC_MSSAR_BODY_SAR_MODE_STATE_GET 2	 // 请求 SAR工作模式
+#define QUEC_SVC_MSSAR_BODY_SAR_PROFILE_VALUE_SET 3	 // 设置 SAR Table 表号
+#define QUEC_SVC_MSSAR_BODY_SAR_PROFILE_VALUE_GET 4	 // 请求 SAR Table 表号
+#define QUEC_SVC_MSSAR_BODY_SAR_CONFIG_NV_SET 5		 // 设置 SAR TX Power NV
+#define QUEC_SVC_MSSAR_BODY_SAR_CONFIG_NV_GET 6		 // 请求 SAR TX Power NV
+#define QUEC_SVC_MSSAR_BODY_SAR_ON_TABLE_VALUE_SET 7 // 设置 SAR Table 生校表格
+#define QUEC_SVC_MSSAR_BODY_SAR_ON_TABLE_VALUE_GET 8 // 请求 SAR Table 生校表格
+#define QUEC_SVC_MSSAR_BODY_SAR_CLEAR_STATE_SET 9	 // 恢复出厂设置
 typedef struct
 {
-	unsigned char SetBodySarMode;	   /*0 HW control by DPR pin----1 SW control*/
-	unsigned char SetBodySarProfile;   /*0 Sar table 0----1 Sar table 1..........*/
-	unsigned char SetBodySarTech;	   /*1==WCDMA 2==LTE*/
-	unsigned short SetBodySarPower[8]; /*sar power*/
-	unsigned char SetBodySarBand;
-	unsigned char SetBodySarOnTable;
-} quec_mssar_set_sar_config_resp;
+	uint32_t QuecMode;		  // 请求模式(SET/QUERY)
+	uint32_t QuecGetSetState; // 请求模块配置状态
+	uint32_t QuecSetCount;	  // 请求配置的数据长度
+	MBIM_SAR_QUEC_DATA data[0];
+} MBIM_SAR_QUEC_REQ;
 
+// RESP
 typedef struct
 {
-	unsigned char GetBodySarMode;	   /*0 HW control by DPR pin----1 SW control*/
-	unsigned char GetBodySarProfile;   /*0 Sar table 0----1 Sar table 1..........*/
-	unsigned char GetBodySarTech;	   /*1==WCDMA 2==LTE*/
-	unsigned short GetBodySarPower[8]; /*sar power*/
-	unsigned char GetBodySarBand;
-	unsigned char GetBodySarOnTable;
-} quec_mssar_get_sar_config_req;
+	uint32_t QuecMode;			// 请求模式(SET/QUERY)
+	uint32_t QuecGetSetState;	// 请求模块配置状态
+	uint32_t QuecWifiNull;		// WIFI信息(当前不支持)
+	uint32_t QuecSetCount;		// 数据长度
+	MBIM_SAR_QUEC_DATA data[0]; // 数据
+} MBIM_SAR_QUEC_RESP;
 
-typedef struct
-{
-	unsigned char GetBodySarMode;	   /*0 HW control by DPR pin----1 SW control*/
-	unsigned char GetBodySarProfile;   /*0 Sar table 0----1 Sar table 1..........*/
-	unsigned char GetBodySarTech;	   /*1==WCDMA 2==LTE*/
-	unsigned short GetBodySarPower[8]; /*sar power*/
-	unsigned char GetBodySarBand;
-	unsigned char GetBodySarOnTable;
-} quec_mssar_get_sar_config_resp;
-
-typedef struct
-{
-	unsigned long SARMode;
-	unsigned long SARBackOffStatus;
-	unsigned long SARWifiIntegration;
-	unsigned long ElementCount;
-	unsigned char data;
-} MBIM_SAR_INFO;
-
-typedef struct
-{
-	unsigned long SARMode;
-	unsigned long SARBackOffStatus;
-	unsigned long ElementCount;
-	unsigned char data;
-} MBIM_SAR_SET_INFO;
-
-typedef struct
-{
-	unsigned long SAROffset;
-	unsigned long SARStateSize;
-} MBIM_SAR_CONFIG_STATUS;
-
-typedef struct
-{
-	unsigned long SARAntennaIndex;
-	unsigned long SARBAckOffIndex;
-} MBIM_SAR_CONFIG_INFO;
+#pragma pack(pop)
+/******************* end ******************/
 
 class CMbimManager : public IObserver
 {
+private:
+	static std::mutex mGlobalLock;
+	static MbimService mService;
+
+private:
+	std::mutex mReqLock;
+	std::condition_variable mReqCond;
+	uint32_t mRequestId;
+
+private:
+	bool mSarEnable;
+	bool mSarMode;
+
 private:
 	CMbimManager(const CMbimManager &) = delete;
 	CMbimManager &operator=(const CMbimManager &) = delete;
@@ -111,19 +130,17 @@ public:
 	CMbimManager();
 	~CMbimManager();
 
-	static int Init(const char *d);
+	static int Init(const char *d, bool use_sock = false);
 	static void UnInit();
 	static CMbimManager &instance();
+
+	static int openCommandSession(CMbimManager *mm, const char *dev);
+	static int closeCommandSession(CMbimManager *mm, uint32_t *rid);
 
 public:
 	uint32_t getRequestId();
 
 	int GetIsMbimReady(bool *);
-
-	//打开设备服务
-	int OpenDeviceServices(std::string strInterfaceId);
-	//关闭设备服务
-	int CloseDeviceServices(/*CQuectelMbimServices* handle*/);
 
 	int SetSarEnable(bool bEnable);
 
@@ -154,37 +171,6 @@ public:
 	void OpenCmdSessionCb();
 
 	void update(uint8_t *, int);
-
-private:
-	static std::mutex mGlobalLock;
-	static bool mReady;
-	static MbimService mService;
-
-private:
-	std::mutex mReqLock;
-	std::condition_variable mReqCond;
-	uint32_t mRequestId;
-
-private:
-	bool m_bIsSarEnable;
-
-	bool m_bIsMode;
-
-	int m_nSarTable;
-
-	int m_nSarTableOn;
-
-	int m_nSarIndex;
-
-	int m_nSarMode;
-
-	int m_nSarTech;
-
-	std::string m_strSarValue;
-
-	std::vector<MBIM_SAR_CONFIG_INFO> m_vecSarConfigInfo;
-
-	MBIM_SAR_BAND_POWER m_sar_band_power;
 };
 
 typedef CMbimManager MBIMMANAGER;

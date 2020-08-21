@@ -186,11 +186,13 @@ public:
 #define LOG(v) Logger::Instance(v, __FILE__, __LINE__, __func__)
 #define LOGD Logger::Instance(Severity::DEBUG, __FILE__, __LINE__, __func__)
 #define LOGI Logger::Instance(Severity::INFO, __FILE__, __LINE__, __func__)
+#define LOGN Logger::Instance(Severity::NOTICE, __FILE__, __LINE__, __func__)
 #define LOGW Logger::Instance(Severity::WARNING, __FILE__, __LINE__, __func__)
 #define LOGE Logger::Instance(Severity::ERROR, __FILE__, __LINE__, __func__)
 
 #define LOGFD(a, v...) Logger::Instance(Severity::DEBUG, __FILE__, __LINE__, __func__)(a, ##v)
 #define LOGFI(a, v...) Logger::Instance(Severity::INFO, __FILE__, __LINE__, __func__)(a, ##v)
+#define LOGFN(a, v...) Logger::Instance(Severity::NOTICE, __FILE__, __LINE__, __func__)(a, ##v)
 #define LOGFW(a, v...) Logger::Instance(Severity::WARNING, __FILE__, __LINE__, __func__)(a, ##v)
 #define LOGFE(a, v...) Logger::Instance(Severity::ERROR, __FILE__, __LINE__, __func__)(a, ##v)
 
@@ -198,11 +200,13 @@ public:
 #define LOG(v) Logger::Instance(v)
 #define LOGD Logger::Instance(Severity::DEBUG)
 #define LOGI Logger::Instance(Severity::INFO)
+#define LOGN Logger::Instance(Severity::NOTICE)
 #define LOGW Logger::Instance(Severity::WARNING)
 #define LOGE Logger::Instance(Severity::ERROR)
 
 #define LOGFD(a, v...) Logger::Instance(Severity::DEBUG)(a, ##v)
 #define LOGFI(a, v...) Logger::Instance(Severity::INFO)(a, ##v)
+#define LOGFN(a, v...) Logger::Instance(Severity::NOTICE)(a, ##v)
 #define LOGFW(a, v...) Logger::Instance(Severity::WARNING)(a, ##v)
 #define LOGFE(a, v...) Logger::Instance(Severity::ERROR)(a, ##v)
 #endif // NDEBUG

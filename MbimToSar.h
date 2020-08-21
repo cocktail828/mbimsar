@@ -78,7 +78,7 @@ extern "C"
 	// 返回值:	int										// 成功返回 MBIMTOSAR_SUCCESS 失败返回错误码
 	// 描  述:	初始化接口库
 	//************************************
-	int MBIMTOSAR_Init(const char *d);
+	int MBIMTOSAR_Init(const char *tty, int use_sock);
 
 	//************************************
 	// 方  法:	MBIMTOSAR_UnInit
@@ -87,22 +87,6 @@ extern "C"
 	// 描  述:	反初始化接口库 清理所有资源
 	//************************************
 	void MBIMTOSAR_UnInit(void);
-
-	//************************************
-	// 方  法:	MBIMTOSAR_OpenDeviceServices
-	// 参  数:	const char *
-	// 返回值:	int
-	// 描  述:	打开设备
-	//************************************
-	int MBIMTOSAR_OpenDeviceServices(const char *interfaceid);
-
-	//************************************
-	// 方  法:	MBIMTOSAR_CloseDeviceServices
-	// 参  数:	int
-	// 返回值:	int
-	// 描  述:	关闭设备
-	//************************************
-	int MBIMTOSAR_CloseDeviceServices();
 
 	//************************************
 	// 方  法:	MBIMTOSAR_GetIsMbimReady

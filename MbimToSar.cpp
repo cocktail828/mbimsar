@@ -3,24 +3,14 @@
 #include "MbimToSar.h"
 #include "CMbimManager.h"
 
-int MBIMTOSAR_Init(const char *d)
+int MBIMTOSAR_Init(const char *tty, int use_sock)
 {
-	return MBIMMANAGER::instance().Init(d);
+	return MBIMMANAGER::instance().Init(tty, !!use_sock);
 }
 
 void MBIMTOSAR_UnInit(void)
 {
 	MBIMMANAGER::instance().UnInit();
-}
-
-int MBIMTOSAR_OpenDeviceServices(const char *interfaceid)
-{
-	return MBIMMANAGER::instance().OpenDeviceServices(interfaceid);
-}
-
-int MBIMTOSAR_CloseDeviceServices()
-{
-	return MBIMMANAGER::instance().CloseDeviceServices();
 }
 
 int MBIMTOSAR_GetIsMbimReady(bool *bEnable)

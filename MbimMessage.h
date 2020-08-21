@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <string.h>
+#include <stdio.h>
 
 #include "logger.h"
 
@@ -136,49 +137,13 @@ typedef struct
     uint8_t Data[0];
 } MBIM_PROXY_T;
 
-static void str2uuid(UUID_T *uuid, const char *str)
-{
-    assert(str && uuid);
-    sscanf(str, "%02hhx%02hhx%02hhx%02hhx-%02hhx%02hhx-%02hhx%02hhx-%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx",
-           &uuid->uuid[0], &uuid->uuid[1], &uuid->uuid[2], &uuid->uuid[3],
-           &uuid->uuid[4], &uuid->uuid[5], &uuid->uuid[6], &uuid->uuid[7],
-           &uuid->uuid[8], &uuid->uuid[9], &uuid->uuid[10], &uuid->uuid[11],
-           &uuid->uuid[12], &uuid->uuid[13], &uuid->uuid[14], &uuid->uuid[15]);
-}
-
-static std::string uuid2str(UUID_T *uuid)
-{
-    char str[64] = {'\0'};
-    assert(uuid);
-    snprintf(str, sizeof(str), "%02hhx%02hhx%02hhx%02hhx-%02hhx%02hhx-%02hhx%02hhx-%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx",
-             uuid->uuid[0], uuid->uuid[1], uuid->uuid[2], uuid->uuid[3],
-             uuid->uuid[4], uuid->uuid[5], uuid->uuid[6], uuid->uuid[7],
-             uuid->uuid[8], uuid->uuid[9], uuid->uuid[10], uuid->uuid[11],
-             uuid->uuid[12], uuid->uuid[13], uuid->uuid[14], uuid->uuid[15]);
-    return std::string(str);
-}
+void str2uuid(UUID_T *uuid, const char *str);
+std::string uuid2str(UUID_T *uuid);
 
 /*  convert utf8 string to utf16 endian string and return in byte array */
-static std::vector<uint8_t> utf8_to_utf16(const char *str)
-{
-    std::vector<uint8_t> vec;
-    if (nullptr == str || 0 == strlen(str))
-        return vec;
+std::vector<uint8_t> utf8_to_utf16(const char *str);
 
-    std::string string8(str);
-    for (auto c : string8)
-    {
-        vec.emplace_back(c);
-        vec.emplace_back(0);
-    }
-
-    if (vec.size() % 4)
-    {
-        vec.emplace_back(0);
-        vec.emplace_back(0);
-    }
-    return vec;
-}
+void dump_msg(uint8_t *data, int datalen);
 
 #define MAX_DATA_SIZE (4 * 1024)
 class MbimMessage
@@ -260,10 +225,11 @@ public:
     MBIM_COMMAND_MSG_T *newMbimCommand(const char *uuidstr, int cid, bool isset, uint8_t *d = nullptr, int len = 0)
     {
         datalen = sizeof(MBIM_COMMAND_MSG_T) + len;
-        MBIM_COMMAND_MSG_T *ptr = reinterpret_cast<MBIM_COMMAND_MSG_T *>(new (std::nothrow) uint8_t[datalen]);
+        data = new (std::nothrow) uint8_t[datalen];
+        MBIM_COMMAND_MSG_T *ptr = reinterpret_cast<MBIM_COMMAND_MSG_T *>(data);
 
         ptr->MessageHeader.MessageType = htole32(MBIM_COMMAND_MSG);
-        ptr->MessageHeader.MessageLength = htole32(sizeof(MBIM_COMMAND_MSG_T));
+        ptr->MessageHeader.MessageLength = htole32(sizeof(MBIM_COMMAND_MSG_T) + len);
         ptr->MessageHeader.TransactionId = htole32(++tansicationId);
 
         ptr->FragmentHeader.CurrentFragment = htole32(0);
@@ -273,7 +239,7 @@ public:
         ptr->CID = htole32(cid);
         ptr->CommandType = htole32(static_cast<int>(isset)); //0 for a query operation, 1 for a Set operation
         ptr->InformationBufferLength = htole32(len);
-        std::copy(ptr->InformationBuffer, ptr->InformationBuffer + len, d);
+        std::copy(d, d + len, ptr->InformationBuffer);
         return ptr;
     }
 
@@ -307,96 +273,4 @@ public:
 private:
 };
 
-uint32_t MbimMessage::tansicationId = 0;
-
-static void dump_msg(uint8_t *data, int datalen)
-{
-    if (!data || datalen <= 0)
-        return;
-    MBIM_MESSAGE_HEADER *pmsg = reinterpret_cast<MBIM_MESSAGE_HEADER *>(data);
-
-    std::string direction = (le32toh(pmsg->MessageType) & 0x80000000) ? "<<<<<< " : ">>>>>> ";
-
-    auto hex_dump = [&]() {
-        std::string buf(reinterpret_cast<char *>(data));
-        LOGD << "(" << datalen << ")" << direction;
-        for (auto c : buf)
-            LOGD << std::hex << c << ' ';
-        LOGD << std::dec << ENDL;
-    };
-
-    auto dump_header = [&]() {
-        LOGD << direction << "Mbim Header" << ENDL;
-        LOGD << direction << "MessageType   " << le32toh(pmsg->MessageType) << ENDL;
-        LOGD << direction << "MessageLength " << le32toh(pmsg->MessageLength) << ENDL;
-        LOGD << direction << "TransactionId " << le32toh(pmsg->TransactionId) << ENDL;
-    };
-
-    auto dump_body = [&]() {
-        MBIM_INDICATE_STATUS_MSG_T *p = reinterpret_cast<MBIM_INDICATE_STATUS_MSG_T *>(data);
-        LOGD << direction << "FragmentHeader" << ENDL;
-        LOGD << direction << "CurrentFragment " << le32toh(p->FragmentHeader.CurrentFragment) << ENDL;
-        LOGD << direction << "TotalFragments " << le32toh(p->FragmentHeader.TotalFragments) << ENDL;
-        LOGD << direction << "UUID " << uuid2str(&p->DeviceServiceId) << ENDL;
-        LOGD << direction << "CommandID " << le32toh(p->CID) << ENDL;
-        LOGD << direction << "InformationLength " << le32toh(p->InformationBufferLength) << ENDL;
-    };
-
-    hex_dump();
-    switch (le32toh(pmsg->MessageType))
-    {
-    case MBIM_OPEN_MSG:
-    {
-        MBIM_OPEN_MSG_T *p = reinterpret_cast<MBIM_OPEN_MSG_T *>(data);
-        dump_header();
-        LOGD << direction << "MaxControlTransfer " << le32toh(p->MaxControlTransfer) << ENDL;
-        break;
-    }
-    case MBIM_OPEN_DONE:
-    case MBIM_CLOSE_DONE:
-    {
-        MBIM_CLOSE_DONE_T *p = reinterpret_cast<MBIM_CLOSE_DONE_T *>(data);
-        dump_header();
-        LOGD << direction << "Status " << le32toh(p->Status) << ENDL;
-        break;
-    }
-    case MBIM_CLOSE_MSG:
-    {
-        dump_header();
-        break;
-    }
-    case MBIM_COMMAND_MSG:
-    {
-        MBIM_COMMAND_MSG_T *p = reinterpret_cast<MBIM_COMMAND_MSG_T *>(data);
-        dump_header();
-        dump_body();
-        LOGD << direction << "CommandType " << le32toh(p->CommandType) << ENDL;
-        break;
-    }
-    case MBIM_COMMAND_DONE:
-    {
-        MBIM_COMMAND_DONE_T *p = reinterpret_cast<MBIM_COMMAND_DONE_T *>(data);
-        dump_header();
-        dump_body();
-        LOGD << direction << "Status " << le32toh(p->Status) << ENDL;
-        break;
-    }
-    case MBIM_INDICATE_STATUS_MSG:
-    {
-        MBIM_INDICATE_STATUS_MSG_T *p = reinterpret_cast<MBIM_INDICATE_STATUS_MSG_T *>(data);
-        dump_header();
-        dump_body();
-        break;
-    }
-    case MBIM_FUNCTION_ERROR_MSG:
-    {
-        MBIM_FUNCTION_ERROR_MSG_T *p = reinterpret_cast<MBIM_FUNCTION_ERROR_MSG_T *>(data);
-        dump_header();
-        LOGD << direction << "ErrorStatusCode " << le32toh(p->ErrorStatusCode) << ENDL;
-        break;
-    }
-    default:
-        LOGE << "unknow mbim message type " << le32toh(pmsg->MessageType) << ENDL;
-    }
-}
 #endif //_MBIM_MESSAGE

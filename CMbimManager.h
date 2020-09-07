@@ -129,14 +129,18 @@ private:
 	uint32_t mRequestId;
 
 private:
+	std::vector<MBIM_SAR_STATE_BACKOFF_DATA> mVecSarConfigInfo;
 	MBIM_SAR_BAND_POWER mSarBandPower;
 	uint32_t mSarTable;
+	uint32_t mSarIndex;
+	bool mSarTableOn;
 	bool mSarEnable;
 	bool mSarMode;
 
 private:
 	CMbimManager(const CMbimManager &) = delete;
 	CMbimManager &operator=(const CMbimManager &) = delete;
+	void update(uint8_t *, int);
 
 public:
 	CMbimManager();
@@ -181,8 +185,6 @@ public:
 	int SetSarClear();
 
 	void OpenCmdSessionCb();
-
-	void update(uint8_t *, int);
 };
 
 typedef CMbimManager MBIMMANAGER;

@@ -66,6 +66,7 @@ typedef struct
 	uint8_t sarBand;
 	uint16_t sarPower[8];
 } MBIM_SAR_BAND_POWER;
+
 #endif
 
 #ifdef __cplusplus

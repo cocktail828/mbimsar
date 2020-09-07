@@ -45,15 +45,12 @@ int CMbimManager::Init(const char *tty, bool use_sock)
 	if (mService.ready())
 		return true;
 
-	LOGI << __FILE__ << " " << __LINE__ << ENDL;
 	if (!mService.connect(use_sock ? "mbim-proxy" : tty))
 		return -1;
 
-	LOGI << __FILE__ << " " << __LINE__ << ENDL;
 	if (!mService.startPolling())
 		return -1;
 
-	LOGI << __FILE__ << " " << __LINE__ << ENDL;
 	mService.openCommandSession(tty);
 	return mService.ready();
 }
@@ -86,7 +83,7 @@ int CMbimManager::SetSarEnable(bool bEnable)
 	}
 
 	mService.attach(this);
-	if (mReqCond.wait_for(_lk, std::chrono::milliseconds(500)) == std::cv_status::timeout)
+	if (mReqCond.wait_for(_lk, std::chrono::seconds(10)) == std::cv_status::timeout)
 	{
 		LOGE << __func__ << "request id: " << mRequestId << " timeout" << ENDL;
 		return -1;
@@ -108,12 +105,14 @@ int CMbimManager::GetSarEnable(bool *bEnable)
 	}
 
 	mService.attach(this);
-	if (mReqCond.wait_for(_lk, std::chrono::milliseconds(500)) == std::cv_status::timeout)
+	if (mReqCond.wait_for(_lk, std::chrono::seconds(10)) == std::cv_status::timeout)
 	{
 		LOGE << "request id: " << mRequestId << " timeout" << ENDL;
 		*bEnable = 0;
 		return -1;
 	}
+
+	//TODO parser response
 	*bEnable = mSarEnable;
 	LOGE << __func__ << "request id: " << mRequestId << " succussfully" << ENDL;
 	LOGD << "Sar enable state: " << mSarEnable << ENDL;
@@ -125,12 +124,14 @@ int CMbimManager::SetSarMode(int nMode)
 	std::unique_lock<std::mutex> _lk(mReqLock);
 
 	uint8_t buf[1024];
-	int nLen = sizeof(MBIM_SAR_QUEC_REQ) + sizeof(MBIM_SAR_QUEC_DATA);
+	int nLen = sizeof(MBIM_SAR_QUEC_REQ) + sizeof(MBIM_SAR_QUEC_CONFIG_DATA);
 	MBIM_SAR_QUEC_REQ *quecinfo = reinterpret_cast<MBIM_SAR_QUEC_REQ *>(buf);
 	quecinfo->QuecMode = htole32(QUEC_MBIM_MS_SAR_BACKOFF_SET);
 	quecinfo->QuecGetSetState = htole32(QUEC_SVC_MSSAR_BODY_SAR_MODE_STATE_SET);
 	quecinfo->QuecSetCount = htole32(1);
-	quecinfo->data[0].BodySarMode = nMode;
+
+	MBIM_SAR_QUEC_CONFIG_DATA *quecdata = reinterpret_cast<MBIM_SAR_QUEC_CONFIG_DATA *>(quecinfo->data);
+	quecdata->BodySarMode = htole32(nMode);
 
 	if (mService.setCommand(0x01, buf, nLen, &mRequestId))
 	{
@@ -139,7 +140,7 @@ int CMbimManager::SetSarMode(int nMode)
 	}
 
 	mService.attach(this);
-	if (mReqCond.wait_for(_lk, std::chrono::milliseconds(500)) == std::cv_status::timeout)
+	if (mReqCond.wait_for(_lk, std::chrono::seconds(10)) == std::cv_status::timeout)
 	{
 		return -1;
 	}
@@ -153,25 +154,28 @@ int CMbimManager::GetSarMode(int *nMode)
 	std::unique_lock<std::mutex> _lk(mReqLock);
 
 	uint8_t buf[1024];
-	int nLen = sizeof(MBIM_SAR_QUEC_REQ);
+	memset(buf, 0, sizeof(buf));
+	int nLen = sizeof(MBIM_SAR_QUEC_REQ) + sizeof(MBIM_SAR_QUEC_CONFIG_DATA);
+
 	MBIM_SAR_QUEC_REQ *quecinfo = reinterpret_cast<MBIM_SAR_QUEC_REQ *>(buf);
 	quecinfo->QuecMode = htole32(QUEC_MBIM_MS_SAR_BACKOFF_QUERY);
 	quecinfo->QuecGetSetState = htole32(QUEC_SVC_MSSAR_BODY_SAR_MODE_STATE_GET);
-	quecinfo->QuecSetCount = htole32(0);
+	quecinfo->QuecSetCount = htole32(1);
 
-	if (mService.setCommand(0x01, buf, nLen, &mRequestId))
+	if (mService.queryCommand(0x01, buf, nLen, &mRequestId))
 	{
 		LOGE << __func__ << " send error" << ENDL;
 		return -1;
 	}
 
 	mService.attach(this);
-	if (mReqCond.wait_for(_lk, std::chrono::milliseconds(500)) == std::cv_status::timeout)
+	if (mReqCond.wait_for(_lk, std::chrono::seconds(10)) == std::cv_status::timeout)
 	{
 		LOGE << "request id: " << mRequestId << " timeout" << ENDL;
 		return -1;
 	}
 
+	// TODO parser response
 	*nMode = mSarMode;
 	LOGE << __func__ << "request id: " << mRequestId << " succussfully" << ENDL;
 	LOGD << "Sar enable state: " << mSarMode << ENDL;
@@ -181,38 +185,32 @@ int CMbimManager::GetSarMode(int *nMode)
 int CMbimManager::SetSarProfile(int nMode, int nTable)
 {
 	std::unique_lock<std::mutex> _lk(mReqLock);
-	// MBIM_SAR_STATE_BACKOFF_REQ *sarinfo = nullptr;
 
-	// uint8_t *msgBuf = nullptr;
-	// int nLen = sizeof(MBIM_SAR_STATE_BACKOFF_REQ) + sizeof(quec_mssar_set_sar_config_req) - 1;
-	// msgBuf = new (std::nothrow) uint8_t[nLen];
-	// if (msgBuf == nullptr)
-	// {
-	// 	return -1;
-	// }
+	uint8_t buf[1024];
+	memset(buf, 0, sizeof(buf));
+	int nLen = sizeof(MBIM_SAR_STATE_BACKOFF_REQ) + sizeof(MBIM_SAR_STATE_BACKOFF_DATA);
 
-	// sarinfo = (MBIM_SAR_STATE_BACKOFF_REQ *)msgBuf;
-	// sarinfo->SARMode = QUEC_MBIM_MS_SAR_BACKOFF_SET;
-	// sarinfo->SARBackOffStatus = QUEC_SVC_MSSAR_BODY_SAR_PROFILE_VALUE_SET;
-	// sarinfo->ElementCount = sizeof(quec_mssar_set_sar_config_req);
+	MBIM_SAR_STATE_BACKOFF_REQ *sarinfo = reinterpret_cast<MBIM_SAR_STATE_BACKOFF_REQ *>(buf);
+	sarinfo->SARMode = htole32(QUEC_MBIM_MS_SAR_BACKOFF_SET);
+	sarinfo->SARBackOffState = htole32(QUEC_SVC_MSSAR_BODY_SAR_PROFILE_VALUE_SET);
+	sarinfo->ElementCount = htole32(1);
 
-	// quec_mssar_set_sar_config_req *getsar_config = (quec_mssar_set_sar_config_req *)&sarinfo->data;
-	// ZeroMemory(getsar_config, sizeof(quec_mssar_set_sar_config_req));
-	// getsar_config->SetBodySarMode = nMode;
-	// getsar_config->SetBodySarProfile = nTable;
+	MBIM_SAR_QUEC_CONFIG_DATA *getsar_config = reinterpret_cast<MBIM_SAR_QUEC_CONFIG_DATA *>(sarinfo->data);
+	getsar_config->BodySarMode = htole32(nMode);
+	getsar_config->BodySarProfile = htole32(nTable);
 
-	// int ret = mService.setCommand(0x01, msgBuf, nLen, &mRequestId);
-	// delete[] msgBuf;
-	// msgBuf = nullptr;
-	// if (FAILED(ret))
-	// 	return -1;
+	if (mService.setCommand(0x01, buf, nLen, &mRequestId))
+	{
+		LOGE << __func__ << " send error" << ENDL;
+		return -1;
+	}
 
-	// mService.attach(this);
-	// if (mReqCond.wait_for(_lk, std::chrono::milliseconds(500)) == std::cv_status::timeout)
-	// {
-	// 	LOGE << "request id: " << mRequestId << " timeout" << ENDL;
-	// 	return -1;
-	// }
+	mService.attach(this);
+	if (mReqCond.wait_for(_lk, std::chrono::seconds(10)) == std::cv_status::timeout)
+	{
+		LOGE << "request id: " << mRequestId << " timeout" << ENDL;
+		return -1;
+	}
 
 	return 0;
 }
@@ -220,77 +218,65 @@ int CMbimManager::SetSarProfile(int nMode, int nTable)
 int CMbimManager::GetSarProfile(int nMode, int *nTable)
 {
 	std::unique_lock<std::mutex> _lk(mReqLock);
-	// MBIM_SAR_STATE_BACKOFF_REQ *sarinfo = nullptr;
 
-	// uint8_t *msgBuf = nullptr;
-	// int nLen = sizeof(MBIM_SAR_STATE_BACKOFF_REQ) + sizeof(quec_mssar_get_sar_config_req) - 1;
-	// msgBuf = new (std::nothrow) uint8_t[nLen];
-	// if (msgBuf == nullptr)
-	// {
-	// 	return -1;
-	// }
+	uint8_t buf[1024];
+	memset(buf, 0, sizeof(buf));
 
-	// sarinfo = (MBIM_SAR_STATE_BACKOFF_REQ *)msgBuf;
-	// sarinfo->SARMode = QUEC_MBIM_MS_SAR_BACKOFF_QUERY;
-	// sarinfo->SARBackOffStatus = QUEC_SVC_MSSAR_BODY_SAR_PROFILE_VALUE_GET;
-	// sarinfo->ElementCount = sizeof(quec_mssar_get_sar_config_req);
+	MBIM_SAR_STATE_BACKOFF_REQ *sarinfo = reinterpret_cast<MBIM_SAR_STATE_BACKOFF_REQ *>(buf);
+	int nLen = sizeof(MBIM_SAR_STATE_BACKOFF_REQ) + sizeof(MBIM_SAR_QUEC_CONFIG_DATA);
+	sarinfo->SARMode = htole32(QUEC_MBIM_MS_SAR_BACKOFF_QUERY);
+	sarinfo->SARBackOffState = htole32(QUEC_SVC_MSSAR_BODY_SAR_PROFILE_VALUE_GET);
+	sarinfo->ElementCount = htole32(1);
 
-	// quec_mssar_get_sar_config_req *getsar_config = (quec_mssar_get_sar_config_req *)&sarinfo->data;
-	// ZeroMemory(getsar_config, sizeof(quec_mssar_get_sar_config_req));
-	// getsar_config->GetBodySarMode = nMode;
+	MBIM_SAR_QUEC_CONFIG_DATA *getsar_config = reinterpret_cast<MBIM_SAR_QUEC_CONFIG_DATA *>(sarinfo->data);
+	getsar_config->BodySarMode = htole32(nMode);
 
-	// int ret = mService.setCommand(0x01, msgBuf, nLen, &mRequestId);
-	// delete[] msgBuf;
-	// msgBuf = nullptr;
-	// if (FAILED(ret))
-	// 	return -1;
+	if (mService.queryCommand(0x01, buf, nLen, &mRequestId))
+	{
+		LOGE << __func__ << " send error" << ENDL;
+		return -1;
+	}
 
-	// mService.attach(this);
-	// if (mReqCond.wait_for(_lk, std::chrono::milliseconds(500)) == std::cv_status::timeout)
-	// {
-	// 	LOGE << "request id: " << mRequestId << " timeout" << ENDL;
-	// 	return -1;
-	// }
+	mService.attach(this);
+	if (mReqCond.wait_for(_lk, std::chrono::seconds(10)) == std::cv_status::timeout)
+	{
+		LOGE << "request id: " << mRequestId << " timeout" << ENDL;
+		return -1;
+	}
 
-	// *nTable = m_nSarTable;
+	*nTable = mSarTable;
 	return 0;
 }
 
 int CMbimManager::SetSarTableOn(int nMode, int nTable)
 {
 	std::unique_lock<std::mutex> _lk(mReqLock);
-	// MBIM_SAR_STATE_BACKOFF_REQ *sarinfo = nullptr;
 
-	// uint8_t *msgBuf = nullptr;
-	// int nLen = sizeof(MBIM_SAR_STATE_BACKOFF_REQ) + sizeof(quec_mssar_set_sar_config_req) - 1;
-	// msgBuf = new (std::nothrow) uint8_t[nLen];
-	// if (msgBuf == nullptr)
-	// {
-	// 	return -1;
-	// }
+	uint8_t buf[1024];
+	memset(buf, 0, sizeof(buf));
+	int nLen = sizeof(MBIM_SAR_STATE_BACKOFF_REQ) + sizeof(MBIM_SAR_QUEC_CONFIG_DATA);
 
-	// sarinfo = (MBIM_SAR_STATE_BACKOFF_REQ *)msgBuf;
-	// sarinfo->SARMode = QUEC_MBIM_MS_SAR_BACKOFF_SET;
-	// sarinfo->SARBackOffStatus = QUEC_SVC_MSSAR_BODY_SAR_ON_TABLE_VALUE_SET;
-	// sarinfo->ElementCount = sizeof(quec_mssar_set_sar_config_req);
+	MBIM_SAR_STATE_BACKOFF_REQ *sarinfo = reinterpret_cast<MBIM_SAR_STATE_BACKOFF_REQ *>(buf);
+	sarinfo->SARMode = htole32(QUEC_MBIM_MS_SAR_BACKOFF_SET);
+	sarinfo->SARBackOffState = htole32(QUEC_SVC_MSSAR_BODY_SAR_ON_TABLE_VALUE_SET);
+	sarinfo->ElementCount = htole32(1);
 
-	// quec_mssar_set_sar_config_req *getsar_config = (quec_mssar_set_sar_config_req *)&sarinfo->data;
-	// ZeroMemory(getsar_config, sizeof(quec_mssar_set_sar_config_req));
-	// getsar_config->SetBodySarMode = m_nSarMode;
-	// getsar_config->SetBodySarOnTable = nTable;
+	MBIM_SAR_QUEC_CONFIG_DATA *getsar_config = reinterpret_cast<MBIM_SAR_QUEC_CONFIG_DATA *>(sarinfo->data);
+	getsar_config->BodySarMode = htole32(nMode);
+	getsar_config->BodySarOnTable = htole32(nTable);
 
-	// int ret = mService.setCommand(0x01, msgBuf, nLen, &mRequestId);
-	// delete[] msgBuf;
-	// msgBuf = nullptr;
-	// if (FAILED(ret))
-	// 	return -1;
+	if (mService.setCommand(0x01, buf, nLen, &mRequestId))
+	{
+		LOGE << __func__ << " send error" << ENDL;
+		return -1;
+	}
 
-	// mService.attach(this);
-	// if (mReqCond.wait_for(_lk, std::chrono::milliseconds(500)) == std::cv_status::timeout)
-	// {
-	// 	LOGE << "request id: " << mRequestId << " timeout" << ENDL;
-	// 	return -1;
-	// }
+	mService.attach(this);
+	if (mReqCond.wait_for(_lk, std::chrono::seconds(10)) == std::cv_status::timeout)
+	{
+		LOGE << "request id: " << mRequestId << " timeout" << ENDL;
+		return -1;
+	}
 
 	return 0;
 }
@@ -299,38 +285,31 @@ int CMbimManager::GetSarTableOn(int nMode, int *nTable)
 {
 	std::unique_lock<std::mutex> _lk(mReqLock);
 
-	// MBIM_SAR_STATE_BACKOFF_REQ *sarinfo = nullptr;
+	uint8_t buf[1024];
+	memset(buf, 0, sizeof(buf));
+	int nLen = sizeof(MBIM_SAR_STATE_BACKOFF_REQ) + sizeof(MBIM_SAR_QUEC_CONFIG_DATA);
 
-	// uint8_t *msgBuf = nullptr;
-	// int nLen = sizeof(MBIM_SAR_STATE_BACKOFF_REQ) + sizeof(quec_mssar_get_sar_config_req) - 1;
-	// msgBuf = new (std::nothrow) uint8_t[nLen];
-	// if (msgBuf == nullptr)
-	// {
-	// 	return -1;
-	// }
+	MBIM_SAR_STATE_BACKOFF_REQ *sarinfo = reinterpret_cast<MBIM_SAR_STATE_BACKOFF_REQ *>(buf);
+	sarinfo->SARMode = htole32(QUEC_MBIM_MS_SAR_BACKOFF_QUERY);
+	sarinfo->SARBackOffState = htole32(QUEC_SVC_MSSAR_BODY_SAR_ON_TABLE_VALUE_GET);
+	sarinfo->ElementCount = htole32(1);
 
-	// sarinfo = (MBIM_SAR_STATE_BACKOFF_REQ *)msgBuf;
-	// sarinfo->SARMode = QUEC_MBIM_MS_SAR_BACKOFF_QUERY;
-	// sarinfo->SARBackOffStatus = QUEC_SVC_MSSAR_BODY_SAR_ON_TABLE_VALUE_GET;
-	// sarinfo->ElementCount = sizeof(quec_mssar_get_sar_config_req);
+	MBIM_SAR_QUEC_CONFIG_DATA *getsar_config = reinterpret_cast<MBIM_SAR_QUEC_CONFIG_DATA *>(sarinfo->data);
+	getsar_config->BodySarMode = htole32(nMode);
 
-	// quec_mssar_get_sar_config_req *getsar_config = (quec_mssar_get_sar_config_req *)&sarinfo->data;
-	// ZeroMemory(getsar_config, sizeof(quec_mssar_get_sar_config_req));
-	// getsar_config->GetBodySarMode = nMode;
+	if (mService.queryCommand(0x01, buf, nLen, &mRequestId))
+	{
+		LOGE << __func__ << " send error" << ENDL;
+		return -1;
+	}
 
-	// int ret = mService.setCommand(0x01, msgBuf, nLen, &mRequestId);
-	// delete[] msgBuf;
-	// msgBuf = nullptr;
-	// if (FAILED(ret))
-	// 	return -1;
-
-	// mService.attach(this);
-	// if (mReqCond.wait_for(_lk, std::chrono::milliseconds(500)) == std::cv_status::timeout)
-	// {
-	// 	LOGE << "request id: " << mRequestId << " timeout" << ENDL;
-	// 	return -1;
-	// }
-	// *nTable = m_nSarTableOn;
+	mService.attach(this);
+	if (mReqCond.wait_for(_lk, std::chrono::seconds(10)) == std::cv_status::timeout)
+	{
+		LOGE << "request id: " << mRequestId << " timeout" << ENDL;
+		return -1;
+	}
+	*nTable = mSarTable;
 	return 0;
 }
 
@@ -338,21 +317,21 @@ int CMbimManager::GetSarState(int *sartable)
 {
 	std::unique_lock<std::mutex> _lk(mReqLock);
 
-	// if (mService.queryCommand(0x01, nullptr, 0, &mRequestId))
-	// {
-	// 	LOGE << "get sar state failed" << ENDL;
-	// 	return -1;
-	// }
+	if (mService.queryCommand(0x01, nullptr, 0, &mRequestId))
+	{
+		LOGE << "get sar state failed" << ENDL;
+		return -1;
+	}
 
-	// mService.attach(this);
-	// if (mReqCond.wait_for(_lk, std::chrono::milliseconds(500)) == std::cv_status::timeout)
-	// {
-	// 	LOGE << "request id: " << mRequestId << " timeout" << ENDL;
-	// 	*sartable = -1;
-	// 	return -1;
-	// }
+	mService.attach(this);
+	if (mReqCond.wait_for(_lk, std::chrono::seconds(10)) == std::cv_status::timeout)
+	{
+		LOGE << "request id: " << mRequestId << " timeout" << ENDL;
+		*sartable = -1;
+		return -1;
+	}
 
-	// *sartable = m_nSarIndex;
+	*sartable = mSarTable;
 	return 0;
 }
 
@@ -360,43 +339,37 @@ int CMbimManager::SetSarState(int sartable)
 {
 	std::unique_lock<std::mutex> _lk(mReqLock);
 
-	// MBIM_SAR_STATE_BACKOFF_REQ *sarinfo = nullptr;
+	uint8_t buf[1024];
+	memset(buf, 0, sizeof(buf));
+	int nLen = sizeof(MBIM_SAR_STATE_BACKOFF_REQ) + sizeof(MBIM_SAR_CONFIG_STATUS) +
+			   sizeof(MBIM_SAR_STATE_BACKOFF_DATA);
 
-	// uint8_t *msgBuf = nullptr;
-	// int nLen = 28;
-	// msgBuf = new (std::nothrow) uint8_t[nLen];
-	// if (msgBuf == nullptr)
-	// {
-	// 	return -1;
-	// }
+	MBIM_SAR_STATE_BACKOFF_REQ *sarinfo = reinterpret_cast<MBIM_SAR_STATE_BACKOFF_REQ *>(buf);
 
-	// sarinfo = (MBIM_SAR_STATE_BACKOFF_REQ *)msgBuf;
-	// sarinfo->SARMode = 1;
-	// sarinfo->SARBackOffStatus = 1;
-	// sarinfo->ElementCount = 1;
+	sarinfo->SARMode = htole32(1);
+	sarinfo->SARBackOffState = htole32(1);
+	sarinfo->ElementCount = htole32(1);
 
-	// uint8_t *data = (uint8_t *)&sarinfo->data;
+	MBIM_SAR_CONFIG_STATUS *status = reinterpret_cast<MBIM_SAR_CONFIG_STATUS *>(sarinfo->data);
+	status->SAROffset = htole32(20);
+	status->SARStateSize = htole32(8);
 
-	// MBIM_SAR_CONFIG_STATUS *status = (MBIM_SAR_CONFIG_STATUS *)data;
-	// status->SAROffset = 20;
-	// status->SARStateSize = 8;
+	MBIM_SAR_STATE_BACKOFF_DATA *info = reinterpret_cast<MBIM_SAR_STATE_BACKOFF_DATA *>(sarinfo->data + sizeof(MBIM_SAR_CONFIG_STATUS));
+	info->SARAntennaIndex = htole32(0xffffffff);
+	info->SARBAckOffIndex = htole32(sartable);
 
-	// MBIM_SAR_STATE_BACKOFF_DATA *info = (MBIM_SAR_STATE_BACKOFF_DATA *)(data + 8);
-	// info->SARAntennaIndex = 0xffffffff;
-	// info->SARBAckOffIndex = sartable;
+	if (mService.setCommand(0x01, buf, nLen, &mRequestId))
+	{
+		LOGE << __func__ << " send error" << ENDL;
+		return -1;
+	}
 
-	// int ret = mService.setCommand(1, msgBuf, nLen, &mRequestId);
-	// delete[] msgBuf;
-	// msgBuf = nullptr;
-	// if (FAILED(ret))
-	// 	return -1;
-
-	// mService.attach(this);
-	// if (mReqCond.wait_for(_lk, std::chrono::milliseconds(500)) == std::cv_status::timeout)
-	// {
-	// 	LOGE << "request id: " << mRequestId << " timeout" << ENDL;
-	// 	return -1;
-	// }
+	mService.attach(this);
+	if (mReqCond.wait_for(_lk, std::chrono::seconds(10)) == std::cv_status::timeout)
+	{
+		LOGE << "request id: " << mRequestId << " timeout" << ENDL;
+		return -1;
+	}
 
 	return 0;
 }
@@ -404,127 +377,102 @@ int CMbimManager::SetSarState(int sartable)
 int CMbimManager::SetSarValue(int nMode, int nProfile, int nTech, MBIM_SAR_BAND_POWER sarbandpower)
 {
 	std::unique_lock<std::mutex> _lk(mReqLock);
-	// MBIM_SAR_STATE_BACKOFF_REQ *sarinfo = nullptr;
 
-	// uint8_t *msgBuf = nullptr;
-	// int nLen = sizeof(MBIM_SAR_STATE_BACKOFF_REQ) + sizeof(quec_mssar_set_sar_config_req) - 1;
-	// msgBuf = new (std::nothrow) uint8_t[nLen];
-	// if (msgBuf == nullptr)
-	// {
-	// 	return -1;
-	// }
+	uint8_t buf[1024];
+	memset(buf, 0, sizeof(buf));
+	int nLen = sizeof(MBIM_SAR_STATE_BACKOFF_REQ) + sizeof(MBIM_SAR_QUEC_CONFIG_DATA);
 
-	// sarinfo = (MBIM_SAR_STATE_BACKOFF_REQ *)msgBuf;
-	// sarinfo->SARMode = QUEC_MBIM_MS_SAR_BACKOFF_SET;
-	// sarinfo->SARBackOffStatus = QUEC_SVC_MSSAR_BODY_SAR_CONFIG_NV_SET;
-	// sarinfo->ElementCount = sizeof(quec_mssar_set_sar_config_req);
+	MBIM_SAR_STATE_BACKOFF_REQ *sarinfo = reinterpret_cast<MBIM_SAR_STATE_BACKOFF_REQ *>(buf);
+	sarinfo->SARMode = htole32(QUEC_MBIM_MS_SAR_BACKOFF_SET);
+	sarinfo->SARBackOffState = htole32(QUEC_SVC_MSSAR_BODY_SAR_CONFIG_NV_SET);
+	sarinfo->ElementCount = htole32(1);
 
-	// uint8_t *data = (uint8_t *)&sarinfo->data;
-	// quec_mssar_set_sar_config_req *sar_config_req = (quec_mssar_set_sar_config_req *)data;
-	// sar_config_req->SetBodySarMode = nMode;		  //目前sw模式
-	// sar_config_req->SetBodySarProfile = nProfile; //选中哪张表
-	// sar_config_req->SetBodySarTech = nTech;
+	MBIM_SAR_QUEC_CONFIG_DATA *sar_config_req = reinterpret_cast<MBIM_SAR_QUEC_CONFIG_DATA *>(sarinfo->data);
+	sar_config_req->BodySarMode = nMode;	   //目前sw模式
+	sar_config_req->BodySarProfile = nProfile; //选中哪张表
+	sar_config_req->BodySarTech1 = nTech;
 
-	// for (int n = 0; n < 8; n++)
-	// {
-	// 	sar_config_req->SetBodySarPower[n] = sarbandpower.sarPower[n];
-	// }
-	// sar_config_req->SetBodySarBand = sarbandpower.sarBand;
-	// sar_config_req->SetBodySarOnTable = 1;
+	for (int n = 0; n < 8; n++)
+		sar_config_req->BodySarPower[n] = sarbandpower.sarPower[n];
+	sar_config_req->BodySarBand = sarbandpower.sarBand;
+	sar_config_req->BodySarOnTable = 1;
 
-	// int ret = mService.setCommand(0x01, msgBuf, nLen, &mRequestId);
-	// delete[] msgBuf;
-	// msgBuf = nullptr;
-	// if (FAILED(ret))
-	// 	return -1;
+	if (mService.setCommand(0x01, buf, nLen, &mRequestId))
+	{
+		LOGE << __func__ << " send error" << ENDL;
+		return -1;
+	}
 
-	// mService.attach(this);
-	// if (mReqCond.wait_for(_lk, std::chrono::milliseconds(500)) == std::cv_status::timeout)
-	// {
-	// 	LOGE << "request id: " << mRequestId << " timeout" << ENDL;
-	// 	return -1;
-	// }
+	mService.attach(this);
+	if (mReqCond.wait_for(_lk, std::chrono::seconds(10)) == std::cv_status::timeout)
+	{
+		LOGE << "request id: " << mRequestId << " timeout" << ENDL;
+		return -1;
+	}
 	return 0;
 }
 
 int CMbimManager::GetSarValue(int nMode, int nProfile, int nTech, int nBand, MBIM_SAR_BAND_POWER *sarbandpower)
 {
 	std::unique_lock<std::mutex> _lk(mReqLock);
-	// MBIM_SAR_STATE_BACKOFF_REQ *sarinfo = nullptr;
 
-	// uint8_t *msgBuf = nullptr;
-	// int nLen = sizeof(MBIM_SAR_STATE_BACKOFF_REQ) + sizeof(quec_mssar_get_sar_config_req) - 1;
-	// msgBuf = new (std::nothrow) uint8_t[nLen];
-	// if (msgBuf == nullptr)
-	// {
-	// 	return -1;
-	// }
+	uint8_t buf[1024];
+	memset(buf, 0, sizeof(buf));
+	int nLen = sizeof(MBIM_SAR_STATE_BACKOFF_REQ) + sizeof(MBIM_SAR_QUEC_CONFIG_DATA);
 
-	// sarinfo = (MBIM_SAR_STATE_BACKOFF_REQ *)msgBuf;
-	// sarinfo->SARMode = QUEC_MBIM_MS_SAR_BACKOFF_QUERY;
-	// sarinfo->SARBackOffStatus = QUEC_SVC_MSSAR_BODY_SAR_CONFIG_NV_GET;
-	// sarinfo->ElementCount = sizeof(quec_mssar_get_sar_config_resp);
+	MBIM_SAR_STATE_BACKOFF_REQ *sarinfo = reinterpret_cast<MBIM_SAR_STATE_BACKOFF_REQ *>(buf);
+	sarinfo->SARMode = htole32(QUEC_MBIM_MS_SAR_BACKOFF_QUERY);
+	sarinfo->SARBackOffState = htole32(QUEC_SVC_MSSAR_BODY_SAR_CONFIG_NV_GET);
+	sarinfo->ElementCount = htole32(1);
 
-	// uint8_t *data = (uint8_t *)&sarinfo->data;
-	// quec_mssar_get_sar_config_req *sar_config_req = (quec_mssar_get_sar_config_req *)data;
-	// ZeroMemory(sar_config_req, sizeof(quec_mssar_get_sar_config_req));
-	// sar_config_req->GetBodySarMode = nMode;
-	// sar_config_req->GetBodySarProfile = nProfile;
-	// sar_config_req->GetBodySarTech = nTech;
-	// sar_config_req->GetBodySarBand = nBand;
+	MBIM_SAR_QUEC_CONFIG_DATA *sar_config_req = reinterpret_cast<MBIM_SAR_QUEC_CONFIG_DATA *>(sarinfo->data);
+	sar_config_req->BodySarMode = nMode;
+	sar_config_req->BodySarProfile = nProfile;
+	sar_config_req->BodySarTech1 = nTech;
+	sar_config_req->BodySarBand = nBand;
 
-	// int ret = mService.setCommand(0x01, msgBuf, nLen, &mRequestId);
-	// delete[] msgBuf;
-	// msgBuf = nullptr;
+	if (mService.setCommand(0x01, buf, nLen, &mRequestId))
+	{
+		LOGE << __func__ << " send error" << ENDL;
+		return -1;
+	}
 
-	// if (FAILED(ret))
-	// 	return -1;
+	mService.attach(this);
+	if (mReqCond.wait_for(_lk, std::chrono::seconds(10)) == std::cv_status::timeout)
+	{
+		LOGE << "request id: " << mRequestId << " timeout" << ENDL;
+		return -1;
+	}
 
-	// mService.attach(this);
-	// if (mReqCond.wait_for(_lk, std::chrono::milliseconds(500)) == std::cv_status::timeout)
-	// {
-	// 	LOGE << "request id: " << mRequestId << " timeout" << ENDL;
-	// 	return -1;
-	// }
-
-	// *sarbandpower = m_sar_band_power;
+	*sarbandpower = mSarBandPower;
 	return 0;
 }
 
 int CMbimManager::SetSarClear()
 {
 	std::unique_lock<std::mutex> _lk(mReqLock);
-	// MBIM_SAR_STATE_BACKOFF_REQ *sarinfo = nullptr;
 
-	// uint8_t *msgBuf = nullptr;
-	// int nLen = sizeof(MBIM_SAR_STATE_BACKOFF_REQ) + sizeof(quec_mssar_set_sar_config_req) - 1;
-	// msgBuf = new (std::nothrow) uint8_t[nLen];
-	// if (msgBuf == nullptr)
-	// {
-	// 	return -1;
-	// }
+	uint8_t buf[1024];
+	memset(buf, 0, sizeof(buf));
+	int nLen = sizeof(MBIM_SAR_STATE_BACKOFF_REQ) + sizeof(MBIM_SAR_QUEC_CONFIG_DATA);
 
-	// sarinfo = (MBIM_SAR_STATE_BACKOFF_REQ *)msgBuf;
-	// sarinfo->SARMode = QUEC_MBIM_MS_SAR_BACKOFF_SET;
-	// sarinfo->SARBackOffStatus = QUEC_SVC_MSSAR_BODY_SAR_CLEAR_STATE_SET;
-	// sarinfo->ElementCount = sizeof(quec_mssar_set_sar_config_req);
+	MBIM_SAR_STATE_BACKOFF_REQ *sarinfo = reinterpret_cast<MBIM_SAR_STATE_BACKOFF_REQ *>(buf);
+	sarinfo->SARMode = htole32(QUEC_MBIM_MS_SAR_BACKOFF_SET);
+	sarinfo->SARBackOffState = htole32(QUEC_SVC_MSSAR_BODY_SAR_CLEAR_STATE_SET);
+	sarinfo->ElementCount = htole32(1);
 
-	// uint8_t *data = (uint8_t *)&sarinfo->data;
-	// quec_mssar_set_sar_config_req *sar_config_req = (quec_mssar_set_sar_config_req *)data;
-	// ZeroMemory(sar_config_req, sizeof(quec_mssar_set_sar_config_req));
+	if (mService.setCommand(0x01, buf, nLen, &mRequestId))
+	{
+		LOGE << __func__ << " send error" << ENDL;
+		return -1;
+	}
 
-	// int ret = mService.setCommand(0x01, msgBuf, nLen, &mRequestId);
-	// delete[] msgBuf;
-	// msgBuf = nullptr;
-	// if (FAILED(ret))
-	// 	return -1;
-
-	// mService.attach(this);
-	// if (mReqCond.wait_for(_lk, std::chrono::milliseconds(500)) == std::cv_status::timeout)
-	// {
-	// 	LOGE << "request id: " << mRequestId << " timeout" << ENDL;
-	// 	return -1;
-	// }
+	mService.attach(this);
+	if (mReqCond.wait_for(_lk, std::chrono::seconds(10)) == std::cv_status::timeout)
+	{
+		LOGE << "request id: " << mRequestId << " timeout" << ENDL;
+		return -1;
+	}
 
 	return 0;
 }

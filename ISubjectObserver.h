@@ -88,6 +88,10 @@ public:
                 o->update(data, len);
                 break;
             }
+            else
+            {
+                iter++;
+            }
         }
     }
 

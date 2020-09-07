@@ -62,9 +62,9 @@ enum MBIM_SAR_TECH
 #define MBIM_SAR_BAND_POWER_DEFINE
 typedef struct
 {
-	unsigned char sarTech;
-	unsigned char sarBand;
-	unsigned short sarPower[8];
+	uint8_t sarTech;
+	uint8_t sarBand;
+	uint16_t sarPower[8];
 } MBIM_SAR_BAND_POWER;
 #endif
 
